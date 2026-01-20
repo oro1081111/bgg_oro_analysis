@@ -63,11 +63,14 @@ def query_top_mechanics_by_category(
     category_domain: str,
     year_range: Tuple[int, int],
     rank_limit: int,
-    top_n: int = 20,
 ) -> pd.DataFrame:
     """
     依據 (category_domain, year_range, rank_limit) 查出該條件下
-    使用最多的前 top_n 個 mechanics（以遊戲數量計）。
+    該條件下各 mechanic 的統計資訊。
+
+    NOTE:
+    - 這裡不先 LIMIT top_n，因為 bar chart 需要依照使用者選擇的指標
+      (Popularity / Quality / Impact) 來決定 Top 20。
     """
     conn = sqlite3.connect(db_path, timeout=10)
     try:
@@ -90,6 +93,7 @@ def query_top_mechanics_by_category(
         SELECT
             m.name AS mechanic,
             COUNT(DISTINCT g.bgg_id) AS game_count
+            ,AVG(g.rating_geek) AS avg_geek
         FROM games g
         JOIN ranks ro
             ON g.bgg_id = ro.bgg_id
@@ -100,7 +104,6 @@ def query_top_mechanics_by_category(
         WHERE {" AND ".join(where_sql)}
         GROUP BY m.name
         ORDER BY game_count DESC
-        LIMIT {int(top_n)}
         """
 
         return pd.read_sql_query(sql, conn, params=params)
@@ -282,23 +285,58 @@ def render_chart(grouped_df: pd.DataFrame, metric_label: str, rank_limit: int):
     st.subheader(f"📈 {metric_label}（Rank ≤ {rank_limit}）")
     return st.altair_chart(chart, use_container_width=True, on_select="rerun", selection_mode="point_select")
 
-def render_mechanic_bar_chart(mech_df: pd.DataFrame, sel_cat: str, year_range: Tuple[int, int]):
+def render_mechanic_bar_chart(
+    mech_df: pd.DataFrame,
+    sel_cat: str,
+    year_range: Tuple[int, int],
+    metric_label: str,
+):
     st.subheader("🔧 Top 20 Mechanics")
 
     if mech_df is None or mech_df.empty:
         st.info("此條件下沒有可用的 Mechanic 資料。")
         return
 
-    # 讓 bar chart 按 count 排序（由大到小）
+    # 依照 metric_label 計算 bar chart 的值
+    mech_df = mech_df.copy()
+
+    if metric_label.startswith("Popularity"):
+        mech_df["value"] = mech_df["game_count"]
+        x_label = "Number of Games"
+        value_tooltip_title = "Game Count"
+        value_format = ".0f"
+    elif metric_label.startswith("Quality"):
+        mech_df["value"] = mech_df["avg_geek"]
+        x_label = "Average Geek Rating"
+        value_tooltip_title = "Avg Geek Rating"
+        value_format = ".2f"
+    else:
+        mech_df["value"] = mech_df["avg_geek"] * np.log(mech_df["game_count"] + 1)
+        x_label = "Impact Score"
+        value_tooltip_title = "Impact"
+        value_format = ".2f"
+
+    # 防呆：若 value 全部是 NaN，直接提示
+    mech_df = mech_df.dropna(subset=["value"])
+    if mech_df.empty:
+        st.info("此條件下沒有可用的 Mechanic 數值可繪製直條圖。")
+        return
+
+    # 依 value 取 Top 20
+    mech_df = mech_df.sort_values("value", ascending=False).head(20)
+
+    # 讓 bar chart 按 value 排序（由大到小）
     chart = (
         alt.Chart(mech_df)
         .mark_bar()
         .encode(
-            x=alt.X("game_count:Q", title="Number of Games"),
+            x=alt.X("value:Q", title=x_label),
             y=alt.Y("mechanic:N", sort="-x", title="Mechanic"),
             tooltip=[
                 alt.Tooltip("mechanic:N", title="Mechanic"),
-                alt.Tooltip("game_count:Q", title="Game Count"),
+                alt.Tooltip("value:Q", title=value_tooltip_title, format=value_format),
+                alt.Tooltip("game_count:Q", title="Game Count", format=","),
+                alt.Tooltip("avg_geek:Q", title="Avg Geek Rating", format=".2f"),
             ],
         )
         .properties(height=520)
@@ -307,7 +345,7 @@ def render_mechanic_bar_chart(mech_df: pd.DataFrame, sel_cat: str, year_range: T
     start_y, end_y = int(year_range[0]), int(year_range[1])
     if start_y > end_y:
         start_y, end_y = end_y, start_y
-    st.caption(f"Category = {sel_cat} | Year = {start_y}–{end_y}")
+    st.caption(f"Category = {sel_cat} | Year = {start_y}–{end_y} | Metric = {metric_label}")
 
     st.altair_chart(chart, use_container_width=True)
 
@@ -392,9 +430,8 @@ def main():
         category_domain=sel_cat,
         year_range=(start_y, end_y),
         rank_limit=rank_limit,
-        top_n=20,
     )
-    render_mechanic_bar_chart(mech_df, sel_cat, (start_y, end_y))
+    render_mechanic_bar_chart(mech_df, sel_cat, (start_y, end_y), metric_label)
 
     st.divider()
 

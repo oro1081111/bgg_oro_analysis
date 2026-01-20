@@ -69,6 +69,11 @@ streamlit run app.py
   - Top 20 mechanics
   - 遊戲列表（依 overall rank / rating 排序）
 
+Top 20 mechanics 的直條圖會依「分析指標」切換：
+- **Popularity(出版量)**：依各 mechanic 的遊戲數量（count）
+- **Quality(評分)**：依各 mechanic 的平均 Geek Rating
+- **Impact(影響力)**：依各 mechanic 的 `平均 Geek Rating * ln(遊戲數量 + 1)`
+
 ### Ranking（`app_game_search.py`）
 - 資料來源：`bgg.db`（tables: `games`, `ranks`, `mechanics`, `categories`）
 - 依以下條件篩選：
