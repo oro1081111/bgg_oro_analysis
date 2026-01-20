@@ -1,0 +1,53 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+
+# =========================
+# Virtual Environment
+# =========================
+venv/
+.env
+.env.*
+
+# =========================
+# OS / Editor
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# =========================
+# Logs / Runtime
+# =========================
+*.log
+
+# =========================
+# Sensitive credentials
+# =========================
+bgg_cookies.pkl
+
+# =========================
+# Generated / Rebuildable data
+# =========================
+bgg_browse_ids_*.json
+bgg_mechanics.json
+bgg_categories.json
+bgg_categories_with_description.json
+bgg_*.json
+
+# =========================
+# Streamlit cache (optional)
+# =========================
+.streamlit/
+
+
+# Crawler / ingestion scripts (not part of app)
+fetch_*.py
+ingest_*.py
+enrich_*.py
+backfill_*.py
+save_bgg_cookies.py
